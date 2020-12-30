@@ -152,6 +152,9 @@ class TransformerEncoderLayer(nn.Module):
         if not self.normalize_before:
             x = self.final_layer_norm(x)
         return x
+    
+    def apply_masks(self, head_mask):
+        self.self_attn.apply_masks(head_mask)
 
 
 class TransformerDecoderLayer(nn.Module):
@@ -412,3 +415,7 @@ class TransformerDecoderLayer(nn.Module):
 
     def make_generation_fast_(self, need_attn: bool = False, **kwargs):
         self.need_attn = need_attn
+
+    def apply_masks(self, head_mask):
+        self.self_attn.apply_masks(head_mask['self'])
+        self.encoder_attn.apply_masks(head_mask['encoder'])

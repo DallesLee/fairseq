@@ -308,6 +308,22 @@ class TransformerModel(FairseqEncoderDecoderModel):
     ):
         """Get normalized probabilities (or log probs) from a net's output."""
         return self.get_normalized_probs_scriptable(net_output, log_probs, sample)
+    
+    def convert_head_mask(self, head_mask):
+        new_head_mask = {}
+        new_head_mask['encoder'] = head_mask['encoder_self'].unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+        new_head_mask['decoder'] = []
+        for decoder_self, encoder_decoder in zip(head_mask['decoder_self'], head_mask['encoder_decoder']):
+            new_head_mask['decoder'].append({
+                "self": decoder_self.unsqueeze(0).unsqueeze(-1).unsqueeze(-1),
+                "encoder": encoder_decoder.unsqueeze(0).unsqueeze(-1).unsqueeze(-1),
+            })
+        return new_head_mask
+
+    def apply_masks(self, head_mask):
+        head_mask = self.convert_head_mask(head_mask)
+        self.encoder.apply_masks(head_mask['encoder'])
+        self.decoder.apply_masks(head_mask['decoder'])
 
 
 class TransformerEncoder(FairseqEncoder):
@@ -545,6 +561,9 @@ class TransformerEncoder(FairseqEncoder):
             state_dict[version_key] = torch.Tensor([1])
         return state_dict
 
+    def apply_masks(self, head_mask):
+        for i, layer in enumerate(self.layers):
+            layer.apply_masks(head_mask[i])
 
 class TransformerDecoder(FairseqIncrementalDecoder):
     """
@@ -931,6 +950,9 @@ class TransformerDecoder(FairseqIncrementalDecoder):
 
         return state_dict
 
+    def apply_masks(self, head_mask):
+        for i, layer in enumerate(self.layers):
+            layer.apply_masks(head_mask[i])
 
 def Embedding(num_embeddings, embedding_dim, padding_idx):
     m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)

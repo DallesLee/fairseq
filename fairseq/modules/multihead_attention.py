@@ -88,6 +88,8 @@ class MultiheadAttention(nn.Module):
 
         self.onnx_trace = False
 
+        self.head_mask = None
+
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
 
@@ -158,6 +160,7 @@ class MultiheadAttention(nn.Module):
             # A workaround for quantization to work. Otherwise JIT compilation
             # treats bias in linear module as method.
             and not torch.jit.is_scripting()
+            and self.head_mask is None
         ):
             assert key is not None and value is not None
             return F.multi_head_attention_forward(
@@ -355,6 +358,10 @@ class MultiheadAttention(nn.Module):
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 
+        if self.head_mask is not None:
+            attn_probs = attn_probs.view(bsz, self.num_heads, tgt_len, src_len) * self.head_mask
+            attn_probs = attn_probs.view(bsz * self.num_heads, tgt_len, src_len)
+
         assert v is not None
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
@@ -484,3 +491,6 @@ class MultiheadAttention(nn.Module):
 
         for key, value in items_to_add.items():
             state_dict[key] = value
+
+    def apply_masks(self, head_mask):
+        self.head_mask = head_mask
