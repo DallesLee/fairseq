@@ -311,9 +311,13 @@ class TransformerModel(FairseqEncoderDecoderModel):
     
     def convert_head_mask(self, head_mask):
         new_head_mask = {}
-        new_head_mask['encoder'] = head_mask['encoder_self'].unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+        encoder_layers = self.args.encoder_layers
+        decoder_layers = self.args.decoder_layers
+        new_head_mask['encoder'] = head_mask[:encoder_layers].unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
         new_head_mask['decoder'] = []
-        for decoder_self, encoder_decoder in zip(head_mask['decoder_self'], head_mask['encoder_decoder']):
+        encoder_decoders = head_mask[encoder_layers:encoder_layers+decoder_layers]
+        decoder_selfs = head_mask[encoder_layers+decoder_layers:]
+        for decoder_self, encoder_decoder in zip(decoder_selfs, encoder_decoders):
             new_head_mask['decoder'].append({
                 "self": decoder_self.unsqueeze(0).unsqueeze(-1).unsqueeze(-1),
                 "encoder": encoder_decoder.unsqueeze(0).unsqueeze(-1).unsqueeze(-1),

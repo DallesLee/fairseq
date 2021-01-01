@@ -344,6 +344,12 @@ class TranslationTask(LegacyFairseqTask):
             )
         return model
 
+    def prune_step(self, sample, model, criterion, head_mask):
+        model.eval()
+        loss, sample_size, logging_output = criterion(model, sample)
+        head_importance = torch.autograd.grad(loss, head_mask)[0]
+        return head_importance
+
     def valid_step(self, sample, model, criterion):
         loss, sample_size, logging_output = super().valid_step(sample, model, criterion)
         if self.args.eval_bleu:

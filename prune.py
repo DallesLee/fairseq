@@ -22,6 +22,14 @@ from fairseq.model_parallel.megatron_trainer import MegatronTrainer
 from fairseq.trainer import Trainer
 from omegaconf import DictConfig
 
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=os.environ.get("LOGLEVEL", "INFO").upper(),
+    stream=sys.stdout,
+)
+logger = logging.getLogger("prune")
+
 def main(cfg: DictConfig) -> None:
     if isinstance(cfg, argparse.Namespace):
         cfg = convert_namespace_to_omegaconf(cfg)
@@ -109,52 +117,64 @@ def main(cfg: DictConfig) -> None:
     prune_meter.stop()
     logger.info("done pruning in {:.1f} seconds".format(prune_meter.sum))
 
-# def prune(
-#     cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr
-# ) -> Tuple[List[Optional[float]], bool]:
-#     """Train the model for one epoch and return validation losses."""
-#     # Initialize data iterator
-#     itr = epoch_itr.next_epoch_itr(
-#         fix_batches_to_gpus=cfg.distributed_training.fix_batches_to_gpus,
-#         shuffle=(epoch_itr.next_epoch_idx > cfg.dataset.curriculum),
-#     )
-#     if cfg.common.tpu:
-#         itr = utils.tpu_data_loader(itr)
-#     progress = progress_bar.progress_bar(
-#         itr,
-#         log_format=cfg.common.log_format,
-#         log_interval=cfg.common.log_interval,
-#         epoch=epoch_itr.epoch,
-#         tensorboard_logdir=(
-#             cfg.common.tensorboard_logdir
-#             if distributed_utils.is_master(cfg.distributed_training)
-#             else None
-#         ),
-#         default_log_format=("tqdm" if not cfg.common.no_progress_bar else "simple"),
-#         wandb_project=(
-#             cfg.common.wandb_project
-#             if distributed_utils.is_master(cfg.distributed_training)
-#             else None
-#         ),
-#         wandb_run_name=os.environ.get(
-#             "WANDB_NAME", os.path.basename(cfg.checkpoint.save_dir)
-#         ),
-#         azureml_logging=(
-#             cfg.common.azureml_logging
-#             if distributed_utils.is_master(cfg.distributed_training)
-#             else False
-#         ),
-#     )
+def prune(
+    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr
+) -> Tuple[List[Optional[float]], bool]:
+    """Train the model for one epoch and return validation losses."""
+    # Initialize data iterator
+    itr = epoch_itr.next_epoch_itr(
+        fix_batches_to_gpus=cfg.distributed_training.fix_batches_to_gpus,
+        shuffle=(epoch_itr.next_epoch_idx > cfg.dataset.curriculum),
+    )
+    if cfg.common.tpu:
+        itr = utils.tpu_data_loader(itr)
+    progress = progress_bar.progress_bar(
+        itr,
+        log_format=cfg.common.log_format,
+        log_interval=cfg.common.log_interval,
+        epoch=epoch_itr.epoch,
+        tensorboard_logdir=(
+            cfg.common.tensorboard_logdir
+            if distributed_utils.is_master(cfg.distributed_training)
+            else None
+        ),
+        default_log_format=("tqdm" if not cfg.common.no_progress_bar else "simple"),
+        wandb_project=(
+            cfg.common.wandb_project
+            if distributed_utils.is_master(cfg.distributed_training)
+            else None
+        ),
+        wandb_run_name=os.environ.get(
+            "WANDB_NAME", os.path.basename(cfg.checkpoint.save_dir)
+        ),
+        azureml_logging=(
+            cfg.common.azureml_logging
+            if distributed_utils.is_master(cfg.distributed_training)
+            else False
+        ),
+    )
 
-#     trainer.begin_epoch(epoch_itr.epoch)
+    # Initialize head importance scores
+    encoder_layers = trainer.args.encoder_layers
+    decoder_layers = trainer.args.decoder_layers
+    encoder_heads = trainer.args.encoder_attention_heads
+    decoder_heads = trainer.args.decoder_attention_heads
+    device = next(trainer.model.parameters()).device
+    assert encoder_heads == decoder_heads
+    head_importance = torch.zeros([encoder_layers+2*decoder_layers, decoder_heads]).to(device)
 
-#     valid_subsets = cfg.dataset.valid_subset.split(",")
+    # Initialize head masks
+    head_mask = torch.ones([encoder_layers+2*decoder_layers, decoder_heads]).to(device)
 
-#     for i, samples in enumerate(progress):
-#         log_output = trainer.prune_step(samples)
+    trainer.begin_epoch(epoch_itr.epoch)
+
+    for i, samples in enumerate(progress):
+        head_importance += trainer.prune_step(samples, head_mask)
         
 
-#     return head_mask
+    valid_subsets = cfg.dataset.valid_subset.split(",")
+
+    return head_mask
 
 def cli_main(
     modify_parser: Optional[Callable[[argparse.ArgumentParser], None]] = None
