@@ -29,6 +29,7 @@ from itertools import chain
 from fairseq import scoring
 from fairseq.data import encoders
 from fairseq.logging.meters import StopwatchMeter, TimeMeter
+from tqdm import tqdm
 
 
 logging.basicConfig(
@@ -118,29 +119,10 @@ def main(cfg: DictConfig) -> None:
         disable_iterator_cache=task.has_sharded_data("train"),
     )
 
-    prune_meter = meters.StopwatchMeter()
-    prune_meter.start()
-
-    head_importance = compute_head_importance(cfg, trainer, task, epoch_itr)
-
-    prune_meter.stop()
-    logger.info("done computing head importance in {:.1f} seconds".format(prune_meter.sum))
-
-    for num_to_mask in [36, 40, 44, 48, 52, 56, 60, 64, 68]:
-        head_mask = convert_gate_to_mask(head_importance, num_to_mask)
-        # print_2d_tensor(head_mask)
-        model.apply_masks(head_mask)
-        score = eval_bleu_score(cfg, task, model)
-        sparsity = 100 - head_mask.sum() / head_mask.numel() * 100
-        logger.info(
-            "Masking: current score: %f, remaining heads %d (%.1f percents)",
-            score,
-            head_mask.sum(),
-            100 - sparsity,
-        )
+    scores, sparsities, all_head_masks = mask_heads(cfg, task, trainer, epoch_itr, model)
 
 def compute_head_importance(
-    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr
+    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, head_mask=None,
 ) -> Tuple[List[Optional[float]], bool]:
     """Train the model for one epoch and return validation losses."""
     # Initialize data iterator
@@ -177,21 +159,24 @@ def compute_head_importance(
     )
 
     # Initialize head importance scores
-    encoder_layers = trainer.args.encoder_layers
-    decoder_layers = trainer.args.decoder_layers
-    encoder_heads = trainer.args.encoder_attention_heads
-    decoder_heads = trainer.args.decoder_attention_heads
+    encoder_layers = trainer.cfg.model.encoder_layers
+    decoder_layers = trainer.cfg.model.decoder_layers
+    encoder_heads = trainer.cfg.model.encoder_attention_heads
+    decoder_heads = trainer.cfg.model.decoder_attention_heads
     device = next(trainer.model.parameters()).device
     assert encoder_heads == decoder_heads
     head_importance = torch.zeros([encoder_layers+2*decoder_layers, decoder_heads]).to(device)
 
     # Initialize head masks
-    head_mask = torch.ones([encoder_layers+2*decoder_layers, decoder_heads]).to(device)
+    if head_mask is None:
+        head_mask = torch.ones([encoder_layers+2*decoder_layers, decoder_heads]).to(device)
+    head_mask.requires_grad_(requires_grad=True)
 
     trainer.begin_epoch(epoch_itr.epoch)
 
-    for i, samples in enumerate(progress):
-        head_importance += trainer.prune_step(samples, head_mask)
+    for i, samples in enumerate(tqdm(progress)):
+        if head_importance is not None:
+            head_importance += trainer.prune_step(samples, head_mask)
         
 
     # Normalize by layer
@@ -203,21 +188,21 @@ def compute_head_importance(
 
     return head_importance
 
-def convert_gate_to_mask(gates, num_to_mask=None):
-    if num_to_mask is not None:
-        head_mask = torch.ones_like(gates)
-        current_heads_to_mask = gates.view(-1).sort()[1]
-        current_heads_to_mask = current_heads_to_mask[:num_to_mask]
-        head_mask = head_mask.view(-1)
-        head_mask[current_heads_to_mask] = 0.0
-        head_mask = head_mask.view_as(gates)
+
+def get_symbols_to_strip_from_output(generator):
+    if hasattr(generator, "symbols_to_strip_from_output"):
+        return generator.symbols_to_strip_from_output
     else:
-        head_mask = (gates > 0.5).float()
-    return head_mask
+        return {generator.eos}
 
 def eval_bleu_score(
-    cfg: DictConfig, task: tasks.FairseqTask, model, 
+    cfg: DictConfig, model, 
 ):
+    task = tasks.setup_task(cfg.task)
+    model.prepare_for_inference_(cfg)
+
+    task.load_dataset(cfg.dataset.valid_subset, task_cfg=cfg.task)
+
     # Set dictionaries
     try:
         src_dict = getattr(task, "source_dictionary", None)
@@ -229,11 +214,11 @@ def eval_bleu_score(
 
     # Load dataset (possibly sharded)
     itr = task.get_batch_iterator(
-        dataset=task.dataset(cfg.dataset.gen_subset),
+        dataset=task.dataset(cfg.dataset.valid_subset),
         max_tokens=cfg.dataset.max_tokens,
         max_sentences=cfg.dataset.batch_size,
         max_positions=utils.resolve_max_positions(
-            task.max_positions(), *[m.max_positions() for m in model]
+            task.max_positions(), *[model.max_positions()]
         ),
         ignore_invalid_inputs=cfg.dataset.skip_invalid_size_inputs_valid_test,
         required_batch_size_multiple=cfg.dataset.required_batch_size_multiple,
@@ -253,9 +238,8 @@ def eval_bleu_score(
     # Initialize generator
     gen_timer = StopwatchMeter()
 
-    extra_gen_cls_kwargs = {"lm_weight": cfg.generation.lm_weight}
     generator = task.build_generator(
-        model, cfg.generation, extra_gen_cls_kwargs=extra_gen_cls_kwargs
+        [model], cfg.generation
     )
 
     # Handle tokenization and BPE
@@ -270,9 +254,9 @@ def eval_bleu_score(
         return x
 
     scorer = scoring.build_scorer(cfg.scoring, tgt_dict)
-
+    use_cuda = torch.cuda.is_available() and not cfg.common.cpu
     has_target = True
-    for sample in progress:
+    for sample in tqdm(progress):
         sample = utils.move_to_cuda(sample) if use_cuda else sample
         if "net_input" not in sample:
             continue
@@ -315,10 +299,10 @@ def eval_bleu_score(
 
             # Either retrieve the original sentences or regenerate them from tokens.
             if align_dict is not None:
-                src_str = task.dataset(cfg.dataset.gen_subset).src.get_original_text(
+                src_str = task.dataset(cfg.dataset.valid_subset).src.get_original_text(
                     sample_id
                 )
-                target_str = task.dataset(cfg.dataset.gen_subset).tgt.get_original_text(
+                target_str = task.dataset(cfg.dataset.valid_subset).tgt.get_original_text(
                     sample_id
                 )
             else:
@@ -368,15 +352,96 @@ def eval_bleu_score(
                     else:
                         scorer.add(target_tokens, hypo_tokens)
 
+    if has_target:
         # use print to be consistent with other main outputs: S-, H-, T-, D- and so on
         print(
             "Generate {} with beam={}: {}".format(
-                cfg.dataset.gen_subset, cfg.generation.beam, scorer.result_string()
-            ),
-            file=output_file,
+                cfg.dataset.valid_subset, cfg.generation.beam, scorer.result_string()
+            )
         )
 
-    return scorer.result_string()
+    return scorer.score()
+
+def mask_heads(
+    cfg, task, trainer, epoch_itr, model, early_stop_step=None, exact_pruning=True,
+):
+    """ This method shows how to mask head (set some heads to zero), to test the effect on the network,
+        based on the head importance scores, as described in Michel et al. (http://arxiv.org/abs/1905.10650)
+    """
+    head_importance = compute_head_importance(cfg, trainer, task, epoch_itr)
+    original_score = eval_bleu_score(cfg, model)
+    logger.info("Pruning: original score: %f", original_score)
+
+    new_head_mask = torch.ones_like(head_importance)
+    num_to_mask = 4
+
+    scores = []
+    sparsities = []
+    all_head_masks = []
+
+    current_score = original_score
+    sparsities.append(0.0)
+    scores.append(current_score)
+    all_head_masks.append(new_head_mask.clone())
+
+    step = 0
+
+    while new_head_mask.sum() != 0:
+        if early_stop_step and step >= early_stop_step:
+            break
+
+        head_mask = new_head_mask.clone()  # save current head mask
+        # heads from least important to most - keep only not-masked heads
+        head_importance[head_mask == 0.0] = float("Inf")
+        current_heads_to_mask = head_importance.view(-1).sort()[1]
+
+        if len(current_heads_to_mask) <= num_to_mask:
+            break
+
+        # mask heads
+        current_heads_to_mask = current_heads_to_mask[:num_to_mask]
+        logger.info("Heads to mask: %s", str(current_heads_to_mask.tolist()))
+        new_head_mask = new_head_mask.view(-1)
+        new_head_mask[current_heads_to_mask] = 0.0
+        new_head_mask = new_head_mask.view_as(head_mask)
+        print_2d_tensor(new_head_mask)
+
+        # Compute metric and head importance again
+        if exact_pruning and new_head_mask.sum() != 0:
+            head_importance = compute_head_importance(
+                cfg, trainer, task, epoch_itr, head_mask=new_head_mask.clone()
+            )
+        model.apply_masks(new_head_mask)
+        current_score = eval_bleu_score(cfg, model)
+
+        sparsity = 100 - new_head_mask.sum() / new_head_mask.numel() * 100
+        scores.append(current_score)
+        sparsities.append(sparsity)
+        all_head_masks.append(new_head_mask.clone())
+
+        logger.info(
+            "Masking: current score: %f, remaning heads %d (%.1f percents)",
+            current_score,
+            new_head_mask.sum(),
+            100 - sparsity,
+        )
+
+        step += 1
+
+
+    logger.info("Final head mask")
+    print_2d_tensor(new_head_mask)
+
+    return scores, sparsities, all_head_masks
+
+def print_2d_tensor(tensor):
+    """ Print a 2D tensor """
+    logger.info("lv, h >\t" + "\t".join(f"{x + 1}" for x in range(len(tensor[0]))))
+    for row in range(len(tensor)):
+        if tensor.dtype != torch.long:
+            logger.info(f"layer {row + 1}:\t" + "\t".join(f"{x:.5f}" for x in tensor[row].cpu().data))
+        else:
+            logger.info(f"layer {row + 1}:\t" + "\t".join(f"{x:d}" for x in tensor[row].cpu().data))
 
 def cli_main(
     modify_parser: Optional[Callable[[argparse.ArgumentParser], None]] = None
