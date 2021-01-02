@@ -769,6 +769,7 @@ class Trainer(object):
         self.model.apply_masks(head_mask)
 
         ooms = 0
+        head_importance = None
         try:
             # forward and backward
             head_importance = self.task.prune_step(
