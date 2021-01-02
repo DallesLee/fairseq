@@ -348,7 +348,7 @@ class TranslationTask(LegacyFairseqTask):
     def prune_step(self, sample, model, criterion, head_mask):
         model.eval()
         loss, sample_size, logging_output = criterion(model, sample)
-        head_importance = torch.autograd.grad(loss, head_mask)[0]
+        head_importance = torch.autograd.grad(loss, head_mask)[0].detach()
         del loss
         return head_importance
 

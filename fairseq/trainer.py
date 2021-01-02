@@ -780,7 +780,7 @@ class Trainer(object):
 
             # emptying the CUDA cache after the first step can
             # reduce the chance of OOM
-            if self.cuda and self.get_num_updates() == 0:
+            if self.cuda:
                 torch.cuda.empty_cache()
         except RuntimeError as e:
             if "out of memory" in str(e):
