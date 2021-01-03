@@ -112,6 +112,7 @@ def _main(cfg: DictConfig, output_file):
         suffix=cfg.checkpoint.checkpoint_suffix,
         strict=(cfg.checkpoint.checkpoint_shard_count == 1),
         num_shards=cfg.checkpoint.checkpoint_shard_count,
+        apply_gate=True,
     )
 
     head_mask = convert_gate_to_mask(models[0].get_gate_values())
