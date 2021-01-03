@@ -385,7 +385,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
         if self.w is None:
             self.w = nn.Parameter(torch.empty(self.head_size).to(self.device))
             nn.init.xavier_uniform_(self.w)
-        self.num_of_heads num_of_heads
+        self.num_of_heads = num_of_heads
         self.temperature = temperature
         self._apply_dropout = True
     
