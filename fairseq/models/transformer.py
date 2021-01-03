@@ -127,12 +127,12 @@ class TransformerModel(FairseqEncoderDecoderModel):
         super().__init__(encoder, decoder)
         self.args = args
         self.supports_align_args = True
+        self.head_size = [self.args.encoder_layers+self.args.decoder_layers*2, self.args.encoder_attention_heads]
         self.w = nn.Parameter(torch.empty(self.head_size))
         nn.init.xavier_uniform_(self.w)
         self.num_of_heads = None
         self.temperature = None
         self._apply_dropout = False
-        self.head_size = [self.args.encoder_layers+self.args.decoder_layers*2, self.args.encoder_attention_heads]
 
 
     @staticmethod

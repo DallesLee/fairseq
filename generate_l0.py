@@ -117,6 +117,7 @@ def _main(cfg: DictConfig, output_file):
     gates = models[0].get_gate_values()
     print(gates)
     head_mask = convert_gate_to_mask(gates)
+    print("Remaining heads: {}".format(head_mask.sum()))
     models[0].apply_masks(head_mask)
 
     # loading the dataset should happen after the checkpoint has been loaded so we can give it the saved task config
