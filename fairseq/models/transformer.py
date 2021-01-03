@@ -341,7 +341,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
         gate_values.extend(self.encoder.get_gate_values())
         gate_values.extend([gate['encoder'] for gate in self.decoder.get_gate_values()])
         gate_values.extend([gate['self'] for gate in self.decoder.get_gate_values()])
-        return gate_values
+        return torch.stack(gate_values) if gate_values[0] is not None else gate_values
     
     def remove_gates(self):
         self.encoder.remove_gates()
