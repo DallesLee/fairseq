@@ -156,6 +156,17 @@ class TransformerEncoderLayer(nn.Module):
     def apply_masks(self, head_mask):
         self.self_attn.apply_masks(head_mask)
 
+    def apply_gates(self, l0_penalty):
+        self.self_attn.apply_gates(l0_penalty)
+
+    def get_penalty(self):
+        return self.self_attn.get_penalty()
+    
+    def get_gate_values(self):
+        return self.self_attn.get_gate_values()
+    
+    def remove_gates(self):
+        self.self_attn.remove_gates()
 
 class TransformerDecoderLayer(nn.Module):
     """Decoder layer block.
@@ -419,3 +430,20 @@ class TransformerDecoderLayer(nn.Module):
     def apply_masks(self, head_mask):
         self.self_attn.apply_masks(head_mask['self'])
         self.encoder_attn.apply_masks(head_mask['encoder'])
+
+    def apply_gates(self, l0_penalty):
+        self.self_attn.apply_gates(l0_penalty)
+        self.encoder_attn.apply_gates(l0_penalty)
+
+    def get_penalty(self):
+        return self.self_attn.get_penalty() + self.encoder_attn.get_penalty()
+    
+    def get_gate_values(self):
+        return {
+            "self": self.self_attn.get_gate_values(),
+            "encoder": self.encoder_attn.get_gate_values(),
+        }
+    
+    def remove_gates(self):
+        self.self_attn.remove_gates()
+        self.encoder_attn.remove_gates()

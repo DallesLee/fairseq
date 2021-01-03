@@ -14,6 +14,7 @@ from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
 from torch import Tensor, nn
 from torch.nn import Parameter
+import numpy as np
 
 
 @with_incremental_state
@@ -89,6 +90,9 @@ class MultiheadAttention(nn.Module):
         self.onnx_trace = False
 
         self.head_mask = None
+        
+        self._apply_gates = False
+        self.gate = None
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
@@ -161,6 +165,7 @@ class MultiheadAttention(nn.Module):
             # treats bias in linear module as method.
             and not torch.jit.is_scripting()
             and self.head_mask is None
+            and not self._apply_gates
         ):
             assert key is not None and value is not None
             return F.multi_head_attention_forward(
@@ -361,6 +366,9 @@ class MultiheadAttention(nn.Module):
         if self.head_mask is not None:
             attn_probs = attn_probs.view(bsz, self.num_heads, tgt_len, src_len) * self.head_mask
             attn_probs = attn_probs.view(bsz * self.num_heads, tgt_len, src_len)
+        elif self._apply_gates:
+            attn_probs = self.gate(attn_probs.view(bsz, self.num_heads, tgt_len, src_len))
+            attn_probs = attn_probs.view(bsz * self.num_heads, tgt_len, src_len)
 
         assert v is not None
         attn = torch.bmm(attn_probs, v)
@@ -494,3 +502,88 @@ class MultiheadAttention(nn.Module):
 
     def apply_masks(self, head_mask):
         self.head_mask = head_mask
+
+    def apply_gates(self, l0_penalty):
+        if not self._apply_gates:
+            self._apply_gates = True
+            self.gate = ConcreteGate([1,self.num_heads,1,1], l0_penalty=l0_penalty) 
+
+    def get_penalty(self):
+        reg = 0.0
+        if self._apply_gates:
+            reg = self.gate.get_penalty()
+        return reg
+    
+    def get_gate_values(self):
+        gate_values = None
+        if self.gate is not None:
+            gate_values = self.gate.get_gates(False).flatten()
+        return gate_values
+    
+    def remove_gates(self):
+        self._apply_gates = False
+
+class ConcreteGate(nn.Module):
+    """
+    A gate made of stretched concrete distribution (using experimental Stretchable Concrete™)
+    Can be applied to sparsify neural network activations or weights.
+    Example usage: https://gist.github.com/justheuristic/1118a14a798b2b6d47789f7e6f511abd
+    :param shape: shape of gate variable. can be broadcasted.
+        e.g. if you want to apply gate to tensor [batch, length, units] over units axis,
+        your shape should be [1, 1, units]
+    :param temperature: concrete sigmoid temperature, should be in (0, 1] range
+        lower values yield better approximation to actual discrete gate but train longer
+    :param stretch_limits: min and max value of gate before it is clipped to [0, 1]
+        min value should be negative in order to compute l0 penalty as in https://arxiv.org/pdf/1712.01312.pdf
+        however, you can also use tf.nn.sigmoid(log_a) as regularizer if min, max = 0, 1
+    :param l0_penalty: coefficient on the regularizer that minimizes l0 norm of gated value
+    :param eps: a small additive value used to avoid NaNs
+    """
+
+    def __init__(self, shape, temperature=0.33, stretch_limits=(-0.1, 1.1),
+                 l0_penalty=1.0, eps=1e-6):
+        super(ConcreteGate, self).__init__()
+        self.temperature, self.stretch_limits, self.eps = temperature, stretch_limits, eps
+        self.l0_penalty = l0_penalty
+        self.log_a = nn.Parameter(torch.empty(shape))
+        nn.init.xavier_uniform_(self.log_a)
+
+    def forward(self, values, is_train=None):
+        """ applies gate to values, if is_train, adds regularizer to reg_collection """
+        is_train = self.training if is_train is None else is_train
+        gates = self.get_gates(is_train)
+        return values * gates
+
+    def get_gates(self, is_train):
+        """ samples gate activations in [0, 1] interval """
+        low, high = self.stretch_limits
+        if is_train:
+            shape = self.log_a.size()
+            noise = (1 - 2*self.eps) * torch.rand(shape).to(self.log_a.device) + self.eps
+            concrete = torch.sigmoid((torch.log(noise) - torch.log(1 - noise) + self.log_a) / self.temperature)
+        else:
+            concrete = torch.sigmoid(self.log_a)
+
+        stretched_concrete = concrete * (high - low) + low
+        clipped_concrete = torch.clamp(stretched_concrete, 0, 1)
+        return clipped_concrete
+
+    def get_penalty(self):
+        """
+        Computes l0 and l2 penalties. For l2 penalty one must also provide the sparsified values
+        (usually activations or weights) before they are multiplied by the gate
+        Returns the regularizer value that should to be MINIMIZED (negative logprior)
+        """
+        low, high = self.stretch_limits
+        assert low < 0.0, "p_gate_closed can be computed only if lower stretch limit is negative"
+        # compute p(gate_is_closed) = cdf(stretched_sigmoid < 0)
+        p_open = torch.sigmoid(self.log_a - self.temperature * np.log(-low / high))
+        p_open = torch.clamp(p_open, self.eps, 1.0 - self.eps)
+
+        total_reg = self.l0_penalty * torch.sum(p_open)
+        return total_reg
+
+    def get_sparsity_rate(self):
+        """ Computes the fraction of gates which are now active (non-zero) """
+        is_nonzero = self.get_gates(False) == 0.0
+        return torch.mean(is_nonzero.float())

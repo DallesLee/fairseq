@@ -329,6 +329,24 @@ class TransformerModel(FairseqEncoderDecoderModel):
         self.encoder.apply_masks(head_mask['encoder'])
         self.decoder.apply_masks(head_mask['decoder'])
 
+    def apply_gates(self, l0_penalty):
+        self.encoder.apply_gates(l0_penalty)
+        self.decoder.apply_gates(l0_penalty)
+
+    def get_penalty(self):
+        return self.encoder.get_penalty() + self.decoder.get_penalty()
+    
+    def get_gate_values(self):
+        gate_values = []
+        gate_values.extend(self.encoder.get_gate_values())
+        gate_values.extend([gate['encoder'] for gate in self.decoder.get_gate_values()])
+        gate_values.extend([gate['self'] for gate in self.decoder.get_gate_values()])
+        return gate_values
+    
+    def remove_gates(self):
+        self.encoder.remove_gates()
+        self.decoder.remove_gates()
+
 
 class TransformerEncoder(FairseqEncoder):
     """
@@ -568,6 +586,23 @@ class TransformerEncoder(FairseqEncoder):
     def apply_masks(self, head_mask):
         for i, layer in enumerate(self.layers):
             layer.apply_masks(head_mask[i])
+
+    def apply_gates(self, l0_penalty):
+        for layer in self.layers:
+            layer.apply_gates(l0_penalty)
+
+    def get_penalty(self):
+        return sum(layer.get_penalty() for layer in self.layers)
+    
+    def get_gate_values(self):
+        gate_values = []
+        for layer in self.layers:
+            gate_values.append(layer.get_gate_values())
+        return gate_values
+    
+    def remove_gates(self):
+        for layer in self.layers:
+            layer.remove_gates()
 
 class TransformerDecoder(FairseqIncrementalDecoder):
     """
@@ -957,6 +992,23 @@ class TransformerDecoder(FairseqIncrementalDecoder):
     def apply_masks(self, head_mask):
         for i, layer in enumerate(self.layers):
             layer.apply_masks(head_mask[i])
+
+    def apply_gates(self, l0_penalty):
+        for layer in self.layers:
+            layer.apply_gates(l0_penalty)
+
+    def get_penalty(self):
+        return sum(layer.get_penalty() for layer in self.layers)
+    
+    def get_gate_values(self):
+        gate_values = []
+        for layer in self.layers:
+            gate_values.append(layer.get_gate_values())
+        return gate_values
+    
+    def remove_gates(self):
+        for layer in self.layers:
+            layer.remove_gates()
 
 def Embedding(num_embeddings, embedding_dim, padding_idx):
     m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
