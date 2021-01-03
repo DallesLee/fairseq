@@ -72,7 +72,7 @@ def main(cfg: DictConfig) -> None:
 
     # Build model and criterion
     model = task.build_model(cfg.model)
-    model.apply_gates(1.0)
+    model.apply_dropout(36, 1e-5)
     criterion = task.build_criterion(cfg.criterion)
     logger.info(model)
     logger.info("task: {}".format(task.__class__.__name__))
@@ -121,7 +121,7 @@ def main(cfg: DictConfig) -> None:
         # don't cache epoch iterators for sharded datasets
         disable_iterator_cache=task.has_sharded_data("train"),
     )
-    # print(model.get_gate_values())
+    print(model.get_w())
     max_epoch = cfg.optimization.max_epoch or math.inf
     lr = trainer.get_lr()
     train_meter = meters.StopwatchMeter()
@@ -137,7 +137,7 @@ def main(cfg: DictConfig) -> None:
 
         # train for one epoch
         valid_losses, should_stop = train(cfg, trainer, task, epoch_itr)
-        # print(model.get_gate_values())
+        print(model.get_w())
         if should_stop:
             break
         
