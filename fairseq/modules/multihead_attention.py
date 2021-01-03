@@ -92,7 +92,8 @@ class MultiheadAttention(nn.Module):
         self.head_mask = None
         
         self._apply_gates = False
-        self.gate = None
+        self.gate = ConcreteGate([1,self.num_heads,1,1]) 
+        self.l0_penalty = None
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
@@ -506,12 +507,12 @@ class MultiheadAttention(nn.Module):
     def apply_gates(self, l0_penalty):
         if not self._apply_gates:
             self._apply_gates = True
-            self.gate = ConcreteGate([1,self.num_heads,1,1], l0_penalty=l0_penalty) 
+            self.l0_penalty = l0_penalty
 
     def get_penalty(self):
         reg = 0.0
         if self._apply_gates:
-            reg = self.gate.get_penalty()
+            reg = self.gate.get_penalty(self.l0_penalty)
         return reg
     
     def get_gate_values(self):
@@ -540,11 +541,9 @@ class ConcreteGate(nn.Module):
     :param eps: a small additive value used to avoid NaNs
     """
 
-    def __init__(self, shape, temperature=0.33, stretch_limits=(-0.1, 1.1),
-                 l0_penalty=1.0, eps=1e-6):
+    def __init__(self, shape, temperature=0.33, stretch_limits=(-0.1, 1.1), eps=1e-6):
         super(ConcreteGate, self).__init__()
         self.temperature, self.stretch_limits, self.eps = temperature, stretch_limits, eps
-        self.l0_penalty = l0_penalty
         self.log_a = nn.Parameter(torch.empty(shape))
         nn.init.xavier_uniform_(self.log_a)
 
@@ -568,7 +567,7 @@ class ConcreteGate(nn.Module):
         clipped_concrete = torch.clamp(stretched_concrete, 0, 1)
         return clipped_concrete
 
-    def get_penalty(self):
+    def get_penalty(self, l0_penalty):
         """
         Computes l0 and l2 penalties. For l2 penalty one must also provide the sparsified values
         (usually activations or weights) before they are multiplied by the gate
@@ -580,7 +579,7 @@ class ConcreteGate(nn.Module):
         p_open = torch.sigmoid(self.log_a - self.temperature * np.log(-low / high))
         p_open = torch.clamp(p_open, self.eps, 1.0 - self.eps)
 
-        total_reg = self.l0_penalty * torch.sum(p_open)
+        total_reg = l0_penalty * torch.sum(p_open)
         return total_reg
 
     def get_sparsity_rate(self):

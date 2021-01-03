@@ -112,10 +112,11 @@ def _main(cfg: DictConfig, output_file):
         suffix=cfg.checkpoint.checkpoint_suffix,
         strict=(cfg.checkpoint.checkpoint_shard_count == 1),
         num_shards=cfg.checkpoint.checkpoint_shard_count,
-        apply_gate=True,
     )
 
-    head_mask = convert_gate_to_mask(models[0].get_gate_values())
+    gates = models[0].get_gate_values()
+    print(gates)
+    head_mask = convert_gate_to_mask(gates)
     models[0].apply_masks(head_mask)
 
     # loading the dataset should happen after the checkpoint has been loaded so we can give it the saved task config

@@ -247,10 +247,6 @@ def load_model_ensemble(
     suffix="",
     num_shards=1,
     state=None,
-    apply_gate=False,
-    apply_dropout=False,
-    temperature=None,
-    num_of_heads=None,
 ):
     """Loads an ensemble of models.
 
@@ -271,10 +267,6 @@ def load_model_ensemble(
         suffix,
         num_shards,
         state,
-        apply_gate,
-        apply_dropout,
-        temperature,
-        num_of_heads,
     )
     return ensemble, args
 
@@ -287,10 +279,6 @@ def load_model_ensemble_and_task(
     suffix="",
     num_shards=1,
     state=None,
-    apply_gate=False,
-    apply_dropout=False,
-    temperature=None,
-    num_of_heads=None,
 ):
     assert state is None or len(filenames) == 1
 
@@ -328,10 +316,6 @@ def load_model_ensemble_and_task(
 
             # build model for ensemble
             model = task.build_model(cfg.model)
-            if apply_gate:
-                model.apply_gates(1.0)
-            elif apply_dropout:
-                model.apply_dropout(temperature, num_of_heads)
 
             model.load_state_dict(state["model"], strict=strict, model_cfg=cfg.model)
 

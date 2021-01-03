@@ -127,7 +127,8 @@ class TransformerModel(FairseqEncoderDecoderModel):
         super().__init__(encoder, decoder)
         self.args = args
         self.supports_align_args = True
-        self.w = None
+        self.w = nn.Parameter(torch.empty(self.head_size))
+        nn.init.xavier_uniform_(self.w)
         self.num_of_heads = None
         self.temperature = None
         self._apply_dropout = False
@@ -382,9 +383,6 @@ class TransformerModel(FairseqEncoderDecoderModel):
         self.decoder.remove_gates()
     
     def apply_dropout(self, num_of_heads, temperature):
-        if self.w is None:
-            self.w = nn.Parameter(torch.empty(self.head_size))
-            nn.init.xavier_uniform_(self.w)
         self.num_of_heads = num_of_heads
         self.temperature = temperature
         self._apply_dropout = True
