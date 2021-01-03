@@ -72,6 +72,7 @@ def main(cfg: DictConfig) -> None:
 
     # Build model and criterion
     model = task.build_model(cfg.model)
+    model.apply_gates(1.0)
     criterion = task.build_criterion(cfg.criterion)
     logger.info(model)
     logger.info("task: {}".format(task.__class__.__name__))
@@ -94,7 +95,6 @@ def main(cfg: DictConfig) -> None:
     else:
         quantizer = None
 
-    model.apply_gates(1.0)
     # Build trainer
     if cfg.common.model_parallel_size == 1:
         trainer = Trainer(cfg, task, model, criterion, quantizer)

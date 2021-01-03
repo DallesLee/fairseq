@@ -29,11 +29,35 @@ from fairseq.modules import (
 from fairseq.modules.checkpoint_activations import checkpoint_wrapper
 from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
 from torch import Tensor
+import numpy as np
 
 
 DEFAULT_MAX_SOURCE_POSITIONS = 1024
 DEFAULT_MAX_TARGET_POSITIONS = 1024
 
+def gumbel_soft_top_k(w, k, t, double=False):
+    # apply gumbel noise
+
+    u = torch.rand_like(w)
+    r = -torch.log(-torch.log(u)) + w
+    epsilon = torch.ones_like(r)
+    epsilon *= np.finfo(np.float32).tiny
+
+    # soft top k
+    p = torch.zeros([k, w.size()[0]]).to(w.device)
+
+    if double:
+        u = u.double()
+        r = r.double()
+        epsilon = epsilon.double()
+        p = p.double()
+
+    p[0] = torch.exp(nn.functional.log_softmax(r / t, 0))
+    for j in range(1,k):
+        r += torch.log(torch.max(1-p[j-1], epsilon))
+        p[j] = torch.exp(nn.functional.log_softmax(r / t, 0))
+        
+    return p.sum(0)
 
 @register_model("transformer")
 class TransformerModel(FairseqEncoderDecoderModel):
@@ -103,6 +127,12 @@ class TransformerModel(FairseqEncoderDecoderModel):
         super().__init__(encoder, decoder)
         self.args = args
         self.supports_align_args = True
+        self.w = None
+        self.num_of_heads = None
+        self.temperature = None
+        self._apply_dropout = False
+        self.head_size = [self.args.encoder_layers+self.args.decoder_layers*2, self.args.encoder_attention_heads]
+
 
     @staticmethod
     def add_args(parser):
@@ -282,6 +312,10 @@ class TransformerModel(FairseqEncoderDecoderModel):
         Copied from the base class, but without ``**kwargs``,
         which are not supported by TorchScript.
         """
+        if self._apply_dropout:
+            head_mask = gumbel_soft_top_k(self.w.view(-1), self.num_of_heads, self.temperature).view_as(self.w)
+            self.apply_masks(head_mask)
+
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
         )
@@ -346,6 +380,17 @@ class TransformerModel(FairseqEncoderDecoderModel):
     def remove_gates(self):
         self.encoder.remove_gates()
         self.decoder.remove_gates()
+    
+    def apply_dropout(self, num_of_heads, temperature):
+        if self.w is None:
+            self.w = nn.Parameter(torch.empty(self.head_size).to(self.device))
+            nn.init.xavier_uniform_(self.w)
+        self.num_of_heads num_of_heads
+        self.temperature = temperature
+        self._apply_dropout = True
+    
+    def get_w(self):
+        return self.w
 
 
 class TransformerEncoder(FairseqEncoder):
