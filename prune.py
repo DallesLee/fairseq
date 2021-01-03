@@ -119,7 +119,7 @@ def main(cfg: DictConfig) -> None:
         disable_iterator_cache=task.has_sharded_data("train"),
     )
 
-    scores, sparsities, all_head_masks = mask_heads(cfg, task, trainer, epoch_itr, model)
+    scores, sparsities, all_head_masks = mask_heads(cfg, task, trainer, epoch_itr, model, exact_pruning=False)
 
 def compute_head_importance(
     cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, head_mask=None,
