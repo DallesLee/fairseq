@@ -503,7 +503,6 @@ class MultiheadAttention(nn.Module):
 
     def apply_masks(self, head_mask):
         self.head_mask = head_mask
-        self.head_mask.to(self.dropout_module.device())
 
     def apply_gates(self, l0_penalty):
         if not self._apply_gates:

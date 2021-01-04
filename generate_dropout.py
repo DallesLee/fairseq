@@ -115,6 +115,7 @@ def _main(cfg: DictConfig, output_file):
     )
 
     head_mask = convert_gate_to_mask(models[0].get_gate_values(), 36)
+    head_mask = utils.move_to_cuda(head_mask) if use_cuda else head_mask
     models[0].apply_masks(head_mask)
 
     # loading the dataset should happen after the checkpoint has been loaded so we can give it the saved task config
