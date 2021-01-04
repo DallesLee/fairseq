@@ -365,6 +365,7 @@ class MultiheadAttention(nn.Module):
         attn_probs = self.dropout_module(attn_weights)
 
         if self.head_mask is not None:
+            self.head_mask.to(attn_probs.device)
             attn_probs = attn_probs.view(bsz, self.num_heads, tgt_len, src_len) * self.head_mask
             attn_probs = attn_probs.view(bsz * self.num_heads, tgt_len, src_len)
         elif self._apply_gates:
