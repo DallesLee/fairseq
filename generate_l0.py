@@ -115,10 +115,9 @@ def _main(cfg: DictConfig, output_file):
     )
 
     gates = models[0].get_gate_values()
-    print(gates)
     head_mask = convert_gate_to_mask(gates)
     head_mask = utils.move_to_cuda(head_mask) if use_cuda else head_mask
-    print("Remaining heads: {}".format(head_mask.sum()))
+
     models[0].apply_masks(head_mask)
 
     # loading the dataset should happen after the checkpoint has been loaded so we can give it the saved task config
@@ -413,6 +412,9 @@ def _main(cfg: DictConfig, output_file):
             ),
             file=output_file,
         )
+
+    print(gates)
+    print("Remaining heads: {}".format(head_mask.sum()))
 
     return scorer
 
