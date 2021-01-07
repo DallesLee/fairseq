@@ -114,7 +114,7 @@ def _main(cfg: DictConfig, output_file):
         num_shards=cfg.checkpoint.checkpoint_shard_count,
     )
 
-    head_mask = convert_gate_to_mask(models[0].get_gate_values(), 36)
+    head_mask = convert_gate_to_mask(models[0].get_gate_values(), 24)
     head_mask = utils.move_to_cuda(head_mask) if use_cuda else head_mask
     models[0].apply_masks(head_mask)
 
@@ -410,6 +410,9 @@ def _main(cfg: DictConfig, output_file):
             ),
             file=output_file,
         )
+
+    print(models[0].get_w())
+    print("Remaining heads: {}".format(head_mask.sum()))
 
     return scorer
 
