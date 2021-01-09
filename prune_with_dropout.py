@@ -137,7 +137,7 @@ def main(cfg: DictConfig) -> None:
             break
 
         # train for one epoch
-        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, global_step)
+        valid_losses, should_stop, global_step = train(cfg, trainer, task, epoch_itr, global_step)
         # print(model.get_w())
         if should_stop:
             break
@@ -283,7 +283,7 @@ def train(
 
     # reset epoch-level meters
     metrics.reset_meters("train")
-    return valid_losses, should_stop
+    return valid_losses, should_stop, global_step
 
 
 def validate_and_save(
