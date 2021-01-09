@@ -230,7 +230,24 @@ def train(
     valid_subsets = cfg.dataset.valid_subset.split(",")
     should_stop = False
     num_updates = trainer.get_num_updates()
+
     for i, samples in enumerate(progress):
+        if (cfg.pruning.reducing_heads and i <= cfg.pruning.cooldown_steps):
+            num_of_heads = int(cfg.pruning.starting_num_of_heads - 
+                            i / cfg.pruning.cooldown_steps
+                            * (cfg.pruning.starting_num_of_heads - cfg.pruning.num_of_heads))
+        else:
+            num_of_heads = cfg.pruning.num_of_heads
+
+        if (cfg.pruning.annealing and i <= cfg.pruning.cooldown_steps):
+            temperature = np.exp(np.log(cfg.pruning.starting_temperature) - 
+                            i / cfg.pruning.cooldown_steps
+                            * (np.log(cfg.pruning.starting_temperature) - np.log(cfg.pruning.temperature)))
+        else:
+            temperature = cfg.pruning.temperature
+        
+        trainer.model.apply_dropout(num_of_heads, temperature)
+
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
@@ -403,6 +420,7 @@ def cli_main(
     modify_parser: Optional[Callable[[argparse.ArgumentParser], None]] = None
 ) -> None:
     parser = options.get_training_parser()
+    options.add_pruning_args(parser)
     args = options.parse_args_and_arch(parser, modify_parser=modify_parser)
 
     cfg = convert_namespace_to_omegaconf(args)

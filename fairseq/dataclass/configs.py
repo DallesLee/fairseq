@@ -821,6 +821,38 @@ class GenerationConfig(FairseqDataclass):
         metadata={"help": "if set, dont use seed for initializing random generators"},
     )
 
+@dataclass 
+class PruningConfig(FairseqDataclass):
+    temperature: float = field(
+        default=1e-8,
+        metadata={"help": "temperature of dropout."},
+    )
+    num_of_heads: int = field(
+        default=12,
+        metadata={
+            "help": "number of heads to be retained."
+        },
+    )
+    annealing: bool = field(
+        default=False,
+        metadata={"help": "if set, anneal the temperature of dropout."},
+    )
+    reducing_heads: bool = field(
+        default=False,
+        metadata={"help": "if set, reduce the number of heads gradually."},
+    )
+    starting_temperature: float = field(
+        default=1.0,
+        metadata={"help": "starting temperature of annealing."},
+    )
+    starting_num_of_heads: int = field(
+        default=72,
+        metadata={
+            "help": "starting number of heads."
+        },
+    )
+
+
 
 @dataclass
 class CommonEvalConfig(FairseqDataclass):

@@ -19,6 +19,7 @@ from fairseq.dataclass.configs import (
     GenerationConfig,
     InteractiveConfig,
     OptimizationConfig,
+    PruningConfig,
 )
 from fairseq.dataclass.utils import gen_parser_from_dataclass
 
@@ -338,6 +339,10 @@ def add_generation_args(parser):
     gen_parser_from_dataclass(group, GenerationConfig())
     return group
 
+def add_pruning_args(parser):
+    group = parser.add_argument_group("Pruning")
+    gen_parser_from_dataclass(group, PruningConfig())
+    return group
 
 def add_interactive_args(parser):
     group = parser.add_argument_group("Interactive")
