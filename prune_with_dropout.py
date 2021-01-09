@@ -127,6 +127,16 @@ def main(cfg: DictConfig) -> None:
     train_meter = meters.StopwatchMeter()
     train_meter.start()
     global_step = 0
+
+    logger.info(
+        "tempereature: {}, num_of_heads: {}, cooldown_steps: {}, starting_temperature: {}, starting_num_of_heads: {}".format(
+            cfg.pruning.temperature,
+            cfg.pruning.num_of_heads,
+            cfg.pruning.cooldown_steps if cfg.pruning.annealing or cfg.pruning.reducing_heads else "N.A.", 
+            cfg.pruning.starting_temperature if cfg.pruning.annealing else "N.A.", 
+            cfg.pruning.starting_num_of_heads if cfg.pruning.reducing_heads else "N.A.",
+    ))
+
     while epoch_itr.next_epoch_idx <= max_epoch:
         if lr <= cfg.optimization.stop_min_lr:
             logger.info(
@@ -248,7 +258,7 @@ def train(
             temperature = cfg.pruning.temperature
         
         trainer.model.apply_dropout(num_of_heads, temperature)
-        print("num of heads: {}, temperature: {}".format(num_of_heads, temperature))
+        # print("num of heads: {}, temperature: {}".format(num_of_heads, temperature))
 
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
