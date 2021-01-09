@@ -854,7 +854,7 @@ class PruningConfig(FairseqDataclass):
     cooldown_steps: int = field(
         default=10000,
         metadata={
-            "help": "starting number of heads."
+            "help": "number of steps to cooldown."
         },
     )
 

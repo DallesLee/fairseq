@@ -126,6 +126,7 @@ def main(cfg: DictConfig) -> None:
     lr = trainer.get_lr()
     train_meter = meters.StopwatchMeter()
     train_meter.start()
+    global_step = 0
     while epoch_itr.next_epoch_idx <= max_epoch:
         if lr <= cfg.optimization.stop_min_lr:
             logger.info(
@@ -136,7 +137,7 @@ def main(cfg: DictConfig) -> None:
             break
 
         # train for one epoch
-        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr)
+        valid_losses, should_stop = train(cfg, trainer, task, epoch_itr, global_step)
         # print(model.get_w())
         if should_stop:
             break
@@ -185,7 +186,7 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
 
 @metrics.aggregate("train")
 def train(
-    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr
+    cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, global_step,
 ) -> Tuple[List[Optional[float]], bool]:
     """Train the model for one epoch and return validation losses."""
     # Initialize data iterator
@@ -232,16 +233,16 @@ def train(
     num_updates = trainer.get_num_updates()
 
     for i, samples in enumerate(progress):
-        if (cfg.pruning.reducing_heads and i <= cfg.pruning.cooldown_steps):
+        if (cfg.pruning.reducing_heads and global_step <= cfg.pruning.cooldown_steps):
             num_of_heads = int(cfg.pruning.starting_num_of_heads - 
-                            i / cfg.pruning.cooldown_steps
+                            global_step / cfg.pruning.cooldown_steps
                             * (cfg.pruning.starting_num_of_heads - cfg.pruning.num_of_heads))
         else:
             num_of_heads = cfg.pruning.num_of_heads
 
-        if (cfg.pruning.annealing and i <= cfg.pruning.cooldown_steps):
+        if (cfg.pruning.annealing and global_step <= cfg.pruning.cooldown_steps):
             temperature = np.exp(np.log(cfg.pruning.starting_temperature) - 
-                            i / cfg.pruning.cooldown_steps
+                            global_step / cfg.pruning.cooldown_steps
                             * (np.log(cfg.pruning.starting_temperature) - np.log(cfg.pruning.temperature)))
         else:
             temperature = cfg.pruning.temperature
@@ -272,6 +273,8 @@ def train(
 
         if should_stop:
             break
+        
+        global_step += 1
 
     # log end-of-epoch stats
     logger.info("end of epoch {} (average epoch stats below)".format(epoch_itr.epoch))
