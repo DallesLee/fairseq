@@ -247,6 +247,7 @@ def train(
             temperature = cfg.pruning.temperature
         
         trainer.model.apply_dropout(num_of_heads, temperature)
+        print("num of heads: {}, temperature: {}".format(num_of_heads, temperature))
 
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i

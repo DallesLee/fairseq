@@ -937,6 +937,7 @@ class FairseqConfig(FairseqDataclass):
     generation: GenerationConfig = GenerationConfig()
     eval_lm: EvalLMConfig = EvalLMConfig()
     interactive: InteractiveConfig = InteractiveConfig()
+    pruning: PruningConfig = PruningConfig()
     model: Any = MISSING
     task: Any = None
     criterion: Any = None
