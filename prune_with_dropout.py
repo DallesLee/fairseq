@@ -39,7 +39,7 @@ logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO").upper(),
     stream=sys.stdout,
 )
-logger = logging.getLogger("prune_through_l0")
+logger = logging.getLogger("prune_with_dropout")
 
 
 def main(cfg: DictConfig) -> None:
@@ -72,7 +72,7 @@ def main(cfg: DictConfig) -> None:
 
     # Build model and criterion
     model = task.build_model(cfg.model)
-    model.apply_dropout(24, 1e-8)
+    model.apply_dropout(cfg.pruning.num_of_heads, cfg.pruning.temperature)
     criterion = task.build_criterion(cfg.criterion)
     logger.info(model)
     logger.info("task: {}".format(task.__class__.__name__))
