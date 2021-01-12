@@ -35,6 +35,8 @@ import numpy as np
 DEFAULT_MAX_SOURCE_POSITIONS = 1024
 DEFAULT_MAX_TARGET_POSITIONS = 1024
 
+EPSILON = np.finfo(np.float32).tiny
+
 def gumbel_soft_top_k(w, k, t, double=False):
     # apply gumbel noise
 
