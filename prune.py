@@ -201,7 +201,7 @@ def eval_bleu_score(
     task = tasks.setup_task(cfg.task)
     model.prepare_for_inference_(cfg)
 
-    task.load_dataset(cfg.dataset.valid_subset, task_cfg=cfg.task)
+    task.load_dataset(cfg.dataset.gen_subset, task_cfg=cfg.task)
 
     # Set dictionaries
     try:
@@ -214,7 +214,7 @@ def eval_bleu_score(
 
     # Load dataset (possibly sharded)
     itr = task.get_batch_iterator(
-        dataset=task.dataset(cfg.dataset.valid_subset),
+        dataset=task.dataset(cfg.dataset.gen_subset),
         max_tokens=cfg.dataset.max_tokens,
         max_sentences=cfg.dataset.batch_size,
         max_positions=utils.resolve_max_positions(
@@ -299,10 +299,10 @@ def eval_bleu_score(
 
             # Either retrieve the original sentences or regenerate them from tokens.
             if align_dict is not None:
-                src_str = task.dataset(cfg.dataset.valid_subset).src.get_original_text(
+                src_str = task.dataset(cfg.dataset.gen_subset).src.get_original_text(
                     sample_id
                 )
-                target_str = task.dataset(cfg.dataset.valid_subset).tgt.get_original_text(
+                target_str = task.dataset(cfg.dataset.gen_subset).tgt.get_original_text(
                     sample_id
                 )
             else:
@@ -356,7 +356,7 @@ def eval_bleu_score(
         # use print to be consistent with other main outputs: S-, H-, T-, D- and so on
         print(
             "Generate {} with beam={}: {}".format(
-                cfg.dataset.valid_subset, cfg.generation.beam, scorer.result_string()
+                cfg.dataset.gen_subset, cfg.generation.beam, scorer.result_string()
             )
         )
 
