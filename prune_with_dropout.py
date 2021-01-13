@@ -13,6 +13,7 @@ import math
 import os
 import sys
 from typing import Dict, Optional, Any, List, Tuple, Callable
+import warnings
 
 import numpy as np
 import torch
@@ -164,6 +165,8 @@ def main(cfg: DictConfig) -> None:
         )
     train_meter.stop()
     logger.info("done training in {:.1f} seconds".format(train_meter.sum))
+    if (cfg.pruning.annealing or cfg.pruning.reducing_heads) and global_step < cfg.pruning.cooldown_steps:
+        warnings.warn("It never cools down!!!")
 
 
 def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
