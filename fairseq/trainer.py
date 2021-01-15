@@ -38,7 +38,7 @@ class Trainer(object):
     communication of the gradients across workers.
     """
 
-    def __init__(self, cfg: FairseqConfig, task, model, criterion, quantizer=None, dropout_lr=None):
+    def __init__(self, cfg: FairseqConfig, task, model, criterion, quantizer=None):
 
         if isinstance(cfg, Namespace):
             logger.warning(
@@ -128,7 +128,6 @@ class Trainer(object):
         self._start_time = time.time()
         self._previous_training_time = 0
         self._cumulative_training_time = None
-        self.dropout_lr = dropout_lr
 
     def reinitialize(self):
         """Reinitialize the Trainer, typically after model params change."""
@@ -202,26 +201,12 @@ class Trainer(object):
         return self._lr_scheduler
 
     def _build_optimizer(self):
-        if self.dropout_lr is None:
-            params = list(
-                filter(
-                    lambda p: p.requires_grad,
-                    chain(self.model.parameters(), self.criterion.parameters()),
-                )
+        params = list(
+            filter(
+                lambda p: p.requires_grad,
+                chain(self.model.parameters(), self.criterion.parameters()),
             )
-        else:
-            params = [
-                {
-                    "params": [p for n, p in self.model.named_parameters() if n != "w" and p.requires_grad],
-                },
-                {
-                    "params": [p for n, p in self.model.named_parameters() if n == "w"],
-                    "lr": self.dropout_lr,
-                },
-            ]
-            criterion_params = self.criterion.parameters()
-            if criterion_params:
-                params.extend(criterion_params)
+        )
 
         if self.cfg.common.fp16 or self.cfg.common.bf16:
             if self.cuda and torch.cuda.get_device_capability(0)[0] < 7:

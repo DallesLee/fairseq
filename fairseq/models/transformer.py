@@ -25,6 +25,7 @@ from fairseq.modules import (
     SinusoidalPositionalEmbedding,
     TransformerDecoderLayer,
     TransformerEncoderLayer,
+    GradMultiply,
 )
 from fairseq.modules.checkpoint_activations import checkpoint_wrapper
 from fairseq.modules.quant_noise import quant_noise as apply_quant_noise_
@@ -319,6 +320,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
         """
         if self._apply_dropout:
             head_mask = gumbel_soft_top_k(self.w.view(-1), self.num_of_heads, self.temperature).view_as(self.w)
+            head_mask = GradMultiply.apply(head_mask, 10000)
             self.apply_masks(head_mask)
 
         encoder_out = self.encoder(
