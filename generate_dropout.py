@@ -81,7 +81,7 @@ def _main(cfg: DictConfig, output_file):
 
     if cfg.dataset.max_tokens is None and cfg.dataset.batch_size is None:
         cfg.dataset.max_tokens = 12000
-    logger.info(cfg)
+    # logger.info(cfg)
 
     # Fix seed for stochastic decoding
     if cfg.common.seed is not None and not cfg.generation.no_seed_provided:
