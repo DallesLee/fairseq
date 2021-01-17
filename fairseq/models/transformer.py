@@ -138,6 +138,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
         self.num_of_heads = None
         self.temperature = None
         self._apply_dropout = False
+        self.grad_multiplier = args.grad_multiplier
 
 
     @staticmethod
@@ -224,6 +225,8 @@ class TransformerModel(FairseqEncoderDecoderModel):
                             help='block size of quantization noise at training time')
         parser.add_argument('--quant-noise-scalar', type=float, metavar='D', default=0,
                             help='scalar quantization noise and scalar quantization at training time')
+        parser.add_argument('--grad-multiplier', type=float, default=1.0,
+                            help='multiply the grad for w')
         # fmt: on
 
     @classmethod
@@ -319,7 +322,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
         which are not supported by TorchScript.
         """
         if self._apply_dropout:
-            w = GradMultiply.apply(self.w, 10000)
+            w = GradMultiply.apply(self.w, self.grad_multiplier)
             head_mask = gumbel_soft_top_k(w.view(-1), self.num_of_heads, self.temperature).view_as(w)
             self.apply_masks(head_mask)
 
