@@ -322,8 +322,8 @@ class TransformerModel(FairseqEncoderDecoderModel):
         which are not supported by TorchScript.
         """
         if self._apply_dropout:
-            self.w = GradMultiply.apply(self.w, self.grad_multiplier)
-            head_mask = gumbel_soft_top_k(self.w.view(-1), self.num_of_heads, self.temperature).view_as(self.w)
+            w = GradMultiply.apply(self.w, self.grad_multiplier)
+            head_mask = gumbel_soft_top_k(w.view(-1), self.num_of_heads, self.temperature).view_as(w)
             self.apply_masks(head_mask)
 
         encoder_out = self.encoder(
