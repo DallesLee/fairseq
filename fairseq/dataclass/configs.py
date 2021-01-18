@@ -857,6 +857,10 @@ class PruningConfig(FairseqDataclass):
             "help": "number of steps to cooldown."
         },
     )
+    dropout_lr: Optional[float] = field(
+        default=None,
+        metadata={"help": "starting temperature of annealing."},
+    )
 
 
 

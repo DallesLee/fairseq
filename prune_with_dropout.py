@@ -98,7 +98,7 @@ def main(cfg: DictConfig) -> None:
 
     # Build trainer
     if cfg.common.model_parallel_size == 1:
-        trainer = Trainer(cfg, task, model, criterion, quantizer)
+        trainer = Trainer(cfg, task, model, criterion, quantizer, cfg.pruning.dropout_lr)
     else:
         trainer = MegatronTrainer(cfg, task, model, criterion)
 
@@ -131,13 +131,13 @@ def main(cfg: DictConfig) -> None:
 
     logger.info(
         "tempereature: {}, num_of_heads: {}, cooldown_steps: {}, starting_temperature: {}, "\
-            "starting_num_of_heads: {}, grad_multiplier: {}".format(
+            "starting_num_of_heads: {}, dropout_lr: {}".format(
             cfg.pruning.temperature,
             cfg.pruning.num_of_heads,
             cfg.pruning.cooldown_steps if cfg.pruning.annealing or cfg.pruning.reducing_heads else "N.A.", 
             cfg.pruning.starting_temperature if cfg.pruning.annealing else "N.A.", 
             cfg.pruning.starting_num_of_heads if cfg.pruning.reducing_heads else "N.A.",
-            cfg.model.grad_multiplier,
+            cfg.pruning.dropout_lr,
     ))
 
     while epoch_itr.next_epoch_idx <= max_epoch:
