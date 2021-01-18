@@ -800,6 +800,51 @@ class Trainer(object):
             else:
                 raise e
         return head_importance
+    
+    def test_step(self, sample, raise_oom=False):
+        """Do forward, backward and parameter update."""
+        self._set_seed()
+        self.model.eval()
+        self.criterion.eval()
+        self.zero_grad()
+
+        sample, is_dummy_batch = self._prepare_sample(sample)
+
+        self.model.apply_dropout(8, 1.0)
+        w = self.model.get_w()
+
+        ooms = 0
+        head_importance = None
+        try:
+            # forward and backward
+            head_importance = self.task.prune_step(
+                sample=sample,
+                model=self.model,
+                criterion=self.criterion,
+                head_mask=w,
+            )
+
+            # emptying the CUDA cache after the first step can
+            # reduce the chance of OOM
+            if self.cuda:
+                torch.cuda.empty_cache()
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                self._log_oom(e)
+                if raise_oom:
+                    raise e
+                logger.warning(
+                    "attempting to recover from OOM in forward/backward pass"
+                )
+                ooms += 1
+                self.zero_grad()
+                if self.cuda:
+                    torch.cuda.empty_cache()
+                if self.cfg.distributed_training.distributed_world_size == 1:
+                    return None
+            else:
+                raise e
+        return head_importance
 
     @metrics.aggregate("valid")
     def valid_step(self, sample, raise_oom=False):
