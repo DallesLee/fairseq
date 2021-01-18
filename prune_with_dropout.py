@@ -130,12 +130,14 @@ def main(cfg: DictConfig) -> None:
     global_step = 0
 
     logger.info(
-        "tempereature: {}, num_of_heads: {}, cooldown_steps: {}, starting_temperature: {}, starting_num_of_heads: {}".format(
+        "tempereature: {}, num_of_heads: {}, cooldown_steps: {}, starting_temperature: {}, "\
+            "starting_num_of_heads: {}, grad_multiplier: {}".format(
             cfg.pruning.temperature,
             cfg.pruning.num_of_heads,
             cfg.pruning.cooldown_steps if cfg.pruning.annealing or cfg.pruning.reducing_heads else "N.A.", 
             cfg.pruning.starting_temperature if cfg.pruning.annealing else "N.A.", 
             cfg.pruning.starting_num_of_heads if cfg.pruning.reducing_heads else "N.A.",
+            cfg.model.grad_multiplier,
     ))
 
     while epoch_itr.next_epoch_idx <= max_epoch:
