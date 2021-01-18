@@ -64,6 +64,16 @@ class FairseqAdam(FairseqOptimizer):
             self._optimizer = fused_adam_cls(params, **self.optimizer_config)
         else:
             self._optimizer = Adam(params, **self.optimizer_config)
+        self.dropout_group = None
+        if all(isinstance(p, dict) for p in params):
+            for i, p in enumerate(params):
+                self.dropout_group = i
+
+    def set_lr(self, lr):
+        """Set the learning rate."""
+        for i, param_group in enumerate(self.param_groups):
+            if self.dropout_group is None or self.dropout_group != i:
+                param_group["lr"] = lr
 
     @property
     def optimizer_config(self):
