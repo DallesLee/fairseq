@@ -259,6 +259,7 @@ class Trainer(object):
             else:
                 optim.shard_(self._optimizer, self.data_parallel_process_group)
 
+        print(self._optimizer.param_groups[2])
         # We should initialize the learning rate scheduler immediately after
         # building the optimizer, so that the initial learning rate is set.
         self._lr_scheduler = lr_scheduler.build_lr_scheduler(

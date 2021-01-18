@@ -64,7 +64,6 @@ class FairseqAdam(FairseqOptimizer):
             self._optimizer = fused_adam_cls(params, **self.optimizer_config)
         else:
             self._optimizer = Adam(params, **self.optimizer_config)
-            print(params[2])
 
     @property
     def optimizer_config(self):
