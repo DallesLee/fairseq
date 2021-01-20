@@ -60,7 +60,7 @@ def main(cfg: DictConfig) -> None:
         checkpoint_utils.verify_checkpoint_directory(cfg.checkpoint.save_dir)
 
     # Print args
-    logger.info(cfg)
+    # logger.info(cfg)
 
     # Setup task, e.g., translation, language modeling, etc.
     task = tasks.setup_task(cfg.task)
@@ -72,18 +72,19 @@ def main(cfg: DictConfig) -> None:
 
     # Build model and criterion
     model = task.build_model(cfg.model)
-    model.apply_gates(350.0)
+    model.apply_gates(cfg.pruning.l0_penalty)
+    logger.info("l0 penalty: {}".format(cfg.pruning.l0_penalty))
     criterion = task.build_criterion(cfg.criterion)
-    logger.info(model)
-    logger.info("task: {}".format(task.__class__.__name__))
-    logger.info("model: {}".format(model.__class__.__name__))
-    logger.info("criterion: {}".format(criterion.__class__.__name__))
-    logger.info(
-        "num. model params: {} (num. trained: {})".format(
-            sum(p.numel() for p in model.parameters()),
-            sum(p.numel() for p in model.parameters() if p.requires_grad),
-        )
-    )
+    # logger.info(model)
+    # logger.info("task: {}".format(task.__class__.__name__))
+    # logger.info("model: {}".format(model.__class__.__name__))
+    # logger.info("criterion: {}".format(criterion.__class__.__name__))
+    # logger.info(
+    #     "num. model params: {} (num. trained: {})".format(
+    #         sum(p.numel() for p in model.parameters()),
+    #         sum(p.numel() for p in model.parameters() if p.requires_grad),
+    #     )
+    # )
 
     # (optionally) Configure quantization
     if cfg.common.quantization_config_path is not None:
@@ -101,17 +102,17 @@ def main(cfg: DictConfig) -> None:
     else:
         trainer = MegatronTrainer(cfg, task, model, criterion)
 
-    logger.info(
-        "training on {} devices (GPUs/TPUs)".format(
-            cfg.distributed_training.distributed_world_size
-        )
-    )
-    logger.info(
-        "max tokens per GPU = {} and batch size per GPU = {}".format(
-            cfg.dataset.max_tokens,
-            cfg.dataset.batch_size,
-        )
-    )
+    # logger.info(
+    #     "training on {} devices (GPUs/TPUs)".format(
+    #         cfg.distributed_training.distributed_world_size
+    #     )
+    # )
+    # logger.info(
+    #     "max tokens per GPU = {} and batch size per GPU = {}".format(
+    #         cfg.dataset.max_tokens,
+    #         cfg.dataset.batch_size,
+    #     )
+    # )
 
     # Load the latest checkpoint if one is available and restore the
     # corresponding train iterator
@@ -152,7 +153,7 @@ def main(cfg: DictConfig) -> None:
             disable_iterator_cache=task.has_sharded_data("train"),
         )
     train_meter.stop()
-    logger.info("done training in {:.1f} seconds".format(train_meter.sum))
+    # logger.info("done training in {:.1f} seconds".format(train_meter.sum))
 
 
 def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
@@ -256,9 +257,9 @@ def train(
             break
 
     # log end-of-epoch stats
-    logger.info("end of epoch {} (average epoch stats below)".format(epoch_itr.epoch))
-    stats = get_training_stats(metrics.get_smoothed_values("train"))
-    progress.print(stats, tag="train", step=num_updates)
+    # logger.info("end of epoch {} (average epoch stats below)".format(epoch_itr.epoch))
+    # stats = get_training_stats(metrics.get_smoothed_values("train"))
+    # progress.print(stats, tag="train", step=num_updates)
 
     # reset epoch-level meters
     metrics.reset_meters("train")
@@ -314,7 +315,7 @@ def validate_and_save(
 
     # Save checkpoint
     if do_save or should_stop:
-        logger.info("begin save checkpoint")
+        # logger.info("begin save checkpoint")
         checkpoint_utils.save_checkpoint(
             cfg.checkpoint, trainer, epoch_itr, valid_losses[0]
         )
@@ -343,7 +344,7 @@ def validate(
     trainer.begin_valid_epoch(epoch_itr.epoch)
     valid_losses = []
     for subset in subsets:
-        logger.info('begin validation on "{}" subset'.format(subset))
+        # logger.info('begin validation on "{}" subset'.format(subset))
 
         # Initialize data iterator
         itr = trainer.get_valid_iterator(subset).next_epoch_itr(shuffle=False)

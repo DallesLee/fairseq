@@ -861,6 +861,11 @@ class PruningConfig(FairseqDataclass):
         default=None,
         metadata={"help": "starting temperature of annealing."},
     )
+    
+    l0_penalty: Optional[float] = field(
+        default=None,
+        metadata={"help": "coefficient for l0 penalty."},
+    )
 
 
 
