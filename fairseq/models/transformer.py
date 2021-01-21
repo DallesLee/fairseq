@@ -313,7 +313,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
         """
         if self._apply_dropout:
             head_mask = gumbel_soft_top_k(self.w.view(-1), self.num_of_heads, self.temperature).view_as(self.w)
-            self.apply_masks(head_mask)
+            self.apply_masks(head_mask.float())
 
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
