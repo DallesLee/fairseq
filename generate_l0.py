@@ -338,7 +338,11 @@ def _main(cfg: DictConfig, output_file):
     if head_mask.sum() <= 8:
         list_of_nums = list(range(1,9))
     else:
-        list_of_nums = [torch.round(head_mask.sum() / 4) * 4]
+        close = torch.round(head_mask.sum() / 4) * 4
+        if close > 40:
+            list_of_nums = list(close, 76, 4)
+        else:
+            list_of_nums = [close - 4, close, close + 4]
     for num_to_unmask in list_of_nums:
         head_mask = convert_gate_to_mask(gates, num_to_unmask)
         score = eval_bleu_score(
