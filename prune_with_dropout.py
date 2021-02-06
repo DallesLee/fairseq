@@ -248,14 +248,14 @@ def train(
     num_updates = trainer.get_num_updates()
 
     for i, samples in enumerate(progress):
-        if (cfg.pruning.reducing_heads and global_step <= cfg.pruning.cooldown_steps):
+        if (cfg.pruning.reducing_heads and global_step < cfg.pruning.cooldown_steps):
             num_of_heads = int(cfg.pruning.starting_num_of_heads - 
                             global_step / cfg.pruning.cooldown_steps
                             * (cfg.pruning.starting_num_of_heads - cfg.pruning.num_of_heads))
         else:
             num_of_heads = cfg.pruning.num_of_heads
 
-        if (cfg.pruning.annealing and global_step <= cfg.pruning.cooldown_steps):
+        if (cfg.pruning.annealing and global_step < cfg.pruning.cooldown_steps):
             temperature = np.exp(np.log(cfg.pruning.starting_temperature) - 
                             global_step / cfg.pruning.cooldown_steps
                             * (np.log(cfg.pruning.starting_temperature) - np.log(cfg.pruning.temperature)))
