@@ -338,9 +338,9 @@ def _main(cfg: DictConfig, output_file):
     if head_mask.sum() <= 8:
         list_of_nums = list(range(1,9))
     else:
-        close = torch.round(head_mask.sum() / 4) * 4
+        close = int(round(head_mask.sum().item() / 4) * 4)
         if close > 40:
-            list_of_nums = list(close, 76, 4)
+            list_of_nums = list(range(close, 76, 4))
         else:
             list_of_nums = [close - 4, close, close + 4]
     for num_to_unmask in list_of_nums:
