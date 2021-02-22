@@ -645,7 +645,10 @@ class Trainer(object):
                     self._check_grad_norms(grad_norm)
                 if not torch.isfinite(grad_norm).all():
                     # check local gradnorm single GPU case, trigger NanDetector
-                    raise FloatingPointError("gradients are Nan/Inf")
+                    print("grad_norm", grad_norm)
+                    print("w", self.model.get_w())
+                    print("w_grad", self.model.get_w().grad)
+                    # raise FloatingPointError("gradients are Nan/Inf")
 
             with torch.autograd.profiler.record_function("optimizer"):
                 # take an optimization step

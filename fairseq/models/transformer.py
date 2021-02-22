@@ -37,6 +37,7 @@ DEFAULT_MAX_SOURCE_POSITIONS = 1024
 DEFAULT_MAX_TARGET_POSITIONS = 1024
 
 EPSILON = torch.finfo(torch.double).tiny
+# EPSILON = torch.finfo(torch.float32).tiny
 
 def gumbel_soft_top_k(w, k, t):
     # apply gumbel noise
@@ -47,6 +48,7 @@ def gumbel_soft_top_k(w, k, t):
 
     # soft top k
     p = torch.zeros([k, w.size()[0]]).to(w.device).double()
+    # p = torch.zeros([k, w.size()[0]]).to(w.device)
 
     p[0] = torch.exp(nn.functional.log_softmax(r / t, 0))
     # p[0] = torch.softmax(r / t, 0)
@@ -55,7 +57,7 @@ def gumbel_soft_top_k(w, k, t):
         p[j] = torch.exp(nn.functional.log_softmax(r / t, 0))
         # p[j] = torch.softmax(r / t, 0)
         
-    return p.sum(0)
+    return p.sum(0) + EPSILON
 
 @register_model("transformer")
 class TransformerModel(FairseqEncoderDecoderModel):
@@ -127,6 +129,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
         self.supports_align_args = True
         self.head_size = [self.args.encoder_layers+self.args.decoder_layers*2, self.args.encoder_attention_heads]
         self.w = nn.Parameter(torch.empty(self.head_size).double())
+        # self.w = nn.Parameter(torch.empty(self.head_size))
         nn.init.xavier_uniform_(self.w)
         self.num_of_heads = None
         self.temperature = None
@@ -314,6 +317,7 @@ class TransformerModel(FairseqEncoderDecoderModel):
         if self._apply_dropout:
             head_mask = gumbel_soft_top_k(self.w.view(-1), self.num_of_heads, self.temperature).view_as(self.w)
             self.apply_masks(head_mask.float())
+            # self.apply_masks(head_mask)
 
         encoder_out = self.encoder(
             src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
