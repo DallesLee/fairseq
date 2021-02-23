@@ -57,7 +57,7 @@ def gumbel_soft_top_k(w, k, t):
         p[j] = torch.exp(nn.functional.log_softmax(r / t, 0))
         # p[j] = torch.softmax(r / t, 0)
         
-    return p.sum(0) + EPSILON
+    return p.sum(0)
 
 @register_model("transformer")
 class TransformerModel(FairseqEncoderDecoderModel):
