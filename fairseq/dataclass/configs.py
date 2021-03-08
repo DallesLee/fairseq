@@ -861,6 +861,10 @@ class PruningConfig(FairseqDataclass):
         default=None,
         metadata={"help": "starting temperature of annealing."},
     )
+    post: Optional[bool] = field(
+        default=False,
+        metadata={"help": "post hoc pruning."},
+    )
     
     l0_penalty: Optional[float] = field(
         default=None,

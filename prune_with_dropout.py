@@ -98,7 +98,7 @@ def main(cfg: DictConfig) -> None:
 
     # Build trainer
     if cfg.common.model_parallel_size == 1:
-        trainer = Trainer(cfg, task, model, criterion, quantizer, cfg.pruning.dropout_lr)
+        trainer = Trainer(cfg, task, model, criterion, quantizer, cfg.pruning.dropout_lr, cfg.pruning.post)
     else:
         trainer = MegatronTrainer(cfg, task, model, criterion)
 

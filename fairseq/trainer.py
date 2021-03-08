@@ -38,7 +38,7 @@ class Trainer(object):
     communication of the gradients across workers.
     """
 
-    def __init__(self, cfg: FairseqConfig, task, model, criterion, quantizer=None, dropout_lr=None):
+    def __init__(self, cfg: FairseqConfig, task, model, criterion, quantizer=None, dropout_lr=None, post=False):
 
         if isinstance(cfg, Namespace):
             logger.warning(
@@ -130,6 +130,7 @@ class Trainer(object):
         self._cumulative_training_time = None
         
         self.dropout_lr = dropout_lr
+        self.post = post
 
     def reinitialize(self):
         """Reinitialize the Trainer, typically after model params change."""
@@ -210,6 +211,16 @@ class Trainer(object):
                     chain(self.model.parameters(), self.criterion.parameters()),
                 )
             )
+        elif self.post:
+            params = [
+                {
+                    'params': [p for n, p in self.model.named_parameters() if n == "w" and p.requires_grad],
+                    'lr': self.dropout_lr,
+                }
+            ]
+            for n, p in self.model.named_parameters():
+                if n != "w":
+                    p.requires_grad = False
         else:
             params = [
                 {'params': [p for n, p in self.model.named_parameters() if n != "w" and p.requires_grad]},
