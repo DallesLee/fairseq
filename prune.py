@@ -426,6 +426,9 @@ def mask_heads(
             100 - sparsity,
         )
 
+        if new_head_mask.sum() <= 4:
+            num_to_mask = 1
+
         step += 1
 
 
