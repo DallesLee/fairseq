@@ -59,6 +59,16 @@ def gumbel_soft_top_k(w, k, t):
         
     return p.sum(0)
 
+class STEFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input, k):
+        threshold = input.sort(descending = True)[0][k]
+        return (input > threshold).float()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output, None
+
 @register_model("transformer")
 class TransformerModel(FairseqEncoderDecoderModel):
     """
@@ -315,7 +325,8 @@ class TransformerModel(FairseqEncoderDecoderModel):
         which are not supported by TorchScript.
         """
         if self._apply_dropout:
-            head_mask = gumbel_soft_top_k(self.w.view(-1), self.num_of_heads, self.temperature).view_as(self.w)
+            # head_mask = gumbel_soft_top_k(self.w.view(-1), self.num_of_heads, self.temperature).view_as(self.w)
+            head_mask = STEFunction.apply(self.w.view(-1), self.num_of_heads).view_as(self.w)
             self.apply_masks(head_mask.float())
             # self.apply_masks(head_mask)
 

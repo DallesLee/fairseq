@@ -196,12 +196,12 @@ def get_symbols_to_strip_from_output(generator):
         return {generator.eos}
 
 def eval_bleu_score(
-    cfg: DictConfig, model, 
+    cfg: DictConfig, model, split='test'
 ):
     task = tasks.setup_task(cfg.task)
     model.prepare_for_inference_(cfg)
 
-    task.load_dataset(cfg.dataset.gen_subset, task_cfg=cfg.task)
+    task.load_dataset(split, task_cfg=cfg.task)
 
     # Set dictionaries
     try:
@@ -214,7 +214,7 @@ def eval_bleu_score(
 
     # Load dataset (possibly sharded)
     itr = task.get_batch_iterator(
-        dataset=task.dataset(cfg.dataset.gen_subset),
+        dataset=task.dataset(split),
         max_tokens=cfg.dataset.max_tokens,
         max_sentences=cfg.dataset.batch_size,
         max_positions=utils.resolve_max_positions(
@@ -299,10 +299,10 @@ def eval_bleu_score(
 
             # Either retrieve the original sentences or regenerate them from tokens.
             if align_dict is not None:
-                src_str = task.dataset(cfg.dataset.gen_subset).src.get_original_text(
+                src_str = task.dataset(split).src.get_original_text(
                     sample_id
                 )
-                target_str = task.dataset(cfg.dataset.gen_subset).tgt.get_original_text(
+                target_str = task.dataset(split).tgt.get_original_text(
                     sample_id
                 )
             else:
@@ -356,7 +356,7 @@ def eval_bleu_score(
         # use print to be consistent with other main outputs: S-, H-, T-, D- and so on
         print(
             "Generate {} with beam={}: {}".format(
-                cfg.dataset.gen_subset, cfg.generation.beam, scorer.result_string()
+                split, cfg.generation.beam, scorer.result_string()
             )
         )
 
@@ -436,6 +436,63 @@ def mask_heads(
     print_2d_tensor(new_head_mask)
 
     return scores, sparsities, all_head_masks
+
+def gibbs_sampling(
+    cfg, task, trainer, epoch_itr, model, early_stop_step=None, K=4
+):
+    head_importance = compute_head_importance(cfg, trainer, task, epoch_itr)
+    new_head_mask = torch.rand_like(head_importance)
+    new_head_mask[new_head_mask>=0.5] = 1.0
+    new_head_mask[new_head_mask<0.5] = 0.0
+    
+    eval_scores = []
+    test_scores = []
+    all_head_masks = []
+
+    step = 0
+
+    while step <= early_stop_step:
+        # Start pruning
+        head_mask = new_head_mask.clone()  # save current head mask
+
+        current_heads_to_unmask = head_importance.view(-1).sort(descending = True)[1]
+        current_heads_to_unmask = current_heads_to_unmask[:K]
+        logger.info("Heads to unmask: %s", str(current_heads_to_unmask.tolist()))
+
+        new_head_mask = 0.0
+        new_head_mask = new_head_mask.view(-1)
+        new_head_mask[current_heads_to_unmask] = 1.0
+        new_head_mask = new_head_mask.view_as(head_mask)
+
+        # Store results and prepare for next run
+        model.apply_masks(new_head_mask)
+        eval_score = eval_bleu_score(cfg, model, "eval")
+        test_score = eval_bleu_score(cfg, model)
+
+        logger.info(
+            "Step %d: evaluation score: %f, test score: %f, remaning heads %d",
+            step,
+            eval_score,
+            test_score,
+            new_head_mask.sum(),
+        )
+
+        eval_scores.append(eval_score * 100)
+        test_scores.append(test_score * 100)
+        all_head_masks.append(new_head_mask.data)
+
+        head_importance = compute_head_importance(cfg, trainer, task, epoch_itr)
+
+        step += 1
+
+    i = np.argmax(eval_scores)
+    best_score = eval_scores[i]
+    best_head_mask = all_head_masks[i]
+    logger.info("Best score from iteration %d: %f", i, best_score)
+    logger.info("Best head mask")
+    print_2d_tensor(best_head_mask)
+
+    return best_score, best_head_mask
 
 def print_2d_tensor(tensor):
     """ Print a 2D tensor """
