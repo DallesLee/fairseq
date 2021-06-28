@@ -119,7 +119,10 @@ def main(cfg: DictConfig) -> None:
         disable_iterator_cache=task.has_sharded_data("train"),
     )
 
-    scores, sparsities, all_head_masks = mask_heads(cfg, task, trainer, epoch_itr, model, exact_pruning=True)
+    # scores, sparsities, all_head_masks = mask_heads(cfg, task, trainer, epoch_itr, model, exact_pruning=True)
+    for k in [28, 32, 36]:
+        gibbs_sampling(cfg, task, trainer, epoch_itr, model, early_stop_step=12, K=k)
+
 
 def compute_head_importance(
     cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr, head_mask=None,
@@ -440,10 +443,17 @@ def mask_heads(
 def gibbs_sampling(
     cfg, task, trainer, epoch_itr, model, early_stop_step=None, K=4
 ):
-    head_importance = compute_head_importance(cfg, trainer, task, epoch_itr)
-    new_head_mask = torch.rand_like(head_importance)
+    encoder_layers = trainer.cfg.model.encoder_layers
+    decoder_layers = trainer.cfg.model.decoder_layers
+    encoder_heads = trainer.cfg.model.encoder_attention_heads
+    decoder_heads = trainer.cfg.model.decoder_attention_heads
+    device = next(trainer.model.parameters()).device
+    assert encoder_heads == decoder_heads
+    new_head_mask = torch.rand([encoder_layers+2*decoder_layers, decoder_heads]).to(device)
     new_head_mask[new_head_mask>=0.5] = 1.0
     new_head_mask[new_head_mask<0.5] = 0.0
+    model.apply_masks(new_head_mask)
+    head_importance = compute_head_importance(cfg, trainer, task, epoch_itr, head_mask=new_head_mask.clone())
     
     eval_scores = []
     test_scores = []
@@ -459,14 +469,14 @@ def gibbs_sampling(
         current_heads_to_unmask = current_heads_to_unmask[:K]
         logger.info("Heads to unmask: %s", str(current_heads_to_unmask.tolist()))
 
-        new_head_mask = 0.0
+        new_head_mask[:] = 0.0
         new_head_mask = new_head_mask.view(-1)
         new_head_mask[current_heads_to_unmask] = 1.0
         new_head_mask = new_head_mask.view_as(head_mask)
 
         # Store results and prepare for next run
         model.apply_masks(new_head_mask)
-        eval_score = eval_bleu_score(cfg, model, "eval")
+        eval_score = eval_bleu_score(cfg, model, "valid")
         test_score = eval_bleu_score(cfg, model)
 
         logger.info(
@@ -477,16 +487,16 @@ def gibbs_sampling(
             new_head_mask.sum(),
         )
 
-        eval_scores.append(eval_score * 100)
-        test_scores.append(test_score * 100)
+        eval_scores.append(eval_score)
+        test_scores.append(test_score)
         all_head_masks.append(new_head_mask.data)
 
-        head_importance = compute_head_importance(cfg, trainer, task, epoch_itr)
+        head_importance = compute_head_importance(cfg, trainer, task, epoch_itr, head_mask=new_head_mask.clone())
 
         step += 1
 
     i = np.argmax(eval_scores)
-    best_score = eval_scores[i]
+    best_score = test_scores[i]
     best_head_mask = all_head_masks[i]
     logger.info("Best score from iteration %d: %f", i, best_score)
     logger.info("Best head mask")
